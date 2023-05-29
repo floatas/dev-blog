@@ -1,0 +1,238 @@
+---
+layout: post
+title: Pro Windows Subsystem for Linux (WSL) book "review"
+date: 2021-07-12 17:16:00.000000000 +03:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- Software Development
+tags:
+- bash
+- book-review
+- docker
+- tips
+- wsl-2
+meta:
+  _edit_last: '1'
+  ct_author_last_updated: default
+  _wp_old_date: '2021-06-29'
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/2021/07/12/pro-windows-subsystem-for-linux-wsl-book-review/"
+---
+<p><!-- wp:media-text {"mediaId":219,"mediaLink":"https://floatincode.net/?attachment_id=219","mediaType":"image","mediaWidth":18} --></p>
+<div class="wp-block-media-text alignwide is-stacked-on-mobile" style="grid-template-columns:18% auto">
+<figure class="wp-block-media-text__media"><img src="{{ site.baseurl }}/assets/2021/07/ProWindowsSubsystemForLinuxWSLCover-767x1024.png" alt="" class="wp-image-219 size-full" /></figure>
+<div class="wp-block-media-text__content"><!-- wp:heading --></p>
+<h2><a rel="noreferrer noopener" target="_blank" href="https://www.amazon.com/gp/product/1484268725/ref=as_li_tl?ie=UTF8&amp;camp=1789&amp;creative=9325&amp;creativeASIN=1484268725&amp;linkCode=as2&amp;tag=blogofthoth-20&amp;linkId=62857a01d0b7be3c9e9dcf19a6a63ef1">Pro Windows Subsystem for Linux (WSL)</a></h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></div>
+</div>
+<p><!-- /wp:media-text --></p>
+<p><!-- wp:paragraph --></p>
+<p>Review is in quotation marks because this is not a full review, this is a summary and tips of what I learned from this book. When reading it my main focus was to improve my Kubernetes, terraform script workflow. Which involve windows file/directory navigation, editing files on WSL, managing WSL distributions.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Default parameters</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>First lets identify which distributions are installed, which are default and make sure we starting them with correct user.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Change default WSL version" class="wp-block-code"><code lang="bash" class="language-bash">wsl.exe --set-default-version 2 </code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="List all distributions" class="wp-block-code"><code lang="bash" class="language-bash">wsl.exe --list --verbose --all</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="All distribution list, asterisk (*) indicates default" class="wp-block-code"><code lang="bash" class="language-bash"> NAME                   STATE           VERSION
+* Ubuntu                 Running         2
+  docker-desktop-data    Running         2
+  docker-desktop         Running         2 </code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Name  - <em>&lt;wsl distro name&gt;</em> in following commands</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Set default WSL distro" class="wp-block-code"><code lang="bash" class="language-bash">wsl.exe --set-default &lt;wsl distro name&gt;</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="Change default WSL distribution" class="wp-block-code"><code lang="bash" class="language-bash">wsl.exe --set-version &lt;wsl distro name&gt; 2</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="Change default user" class="wp-block-code"><code lang="bash" class="language-bash">&lt;wsl distro name&gt; config --default-user &lt;new user name&gt;</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>File permissions</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Even though file permissions doesn't really fit into what I was looking in this book, wanted to write this down for future reference:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Three groups (&lt;user&gt;&lt;group&gt;&lt;other&gt;):</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>User - by default user who created</li>
+<li>Group - users in a group with assigned access to files</li>
+<li>Other - all other users</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Symbolic form:</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>r - Read</li>
+<li>w - Write</li>
+<li>x - Execute</li>
+<li>- (just dash) for no permission</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Example: rwx-r-xr-</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>rwx - for user</li>
+<li>-r- -for group</li>
+<li>xr- - for other</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Numeric form</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>0 - No permissions, ---</li>
+<li>1 - Execute only, --x</li>
+<li>2 - Write only, -w-</li>
+<li>3 - Write and execute, -wx</li>
+<li>4 - Read, r--</li>
+<li>5 - Read and execute, r-x</li>
+<li>6 - Read and write, rw-</li>
+<li>7 - Read, write and execute, rwx</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Previous example can be written: 745</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Convert between Linux and Windows paths</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>One of the biggest issue for me right now are navigating windows directories in Linux and vice versa.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Convert to windows path (C:\Users\sarun)" class="wp-block-code"><code lang="bash" class="language-bash">wslpath -w /mnt/c/Users/sarun</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="Convert to Linux path (/mnt/c/Users/sarun)" class="wp-block-code"><code lang="bash" class="language-bash">wslpath "C:\Users\sarun"</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="Open explorer in current directory from linux." class="wp-block-code"><code lang="bash" class="language-bash">explorer.exe .</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>It's also possible to browse all WSL distribution files using File Explorer, navigate to: <code>\\wsl$</code></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Windows X server</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Install x server</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>configuration:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><a href="https://stackoverflow.com/a/61110604">https://stackoverflow.com/a/61110604</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>WSL distribution settings</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre title="Install required packages" class="wp-block-code"><code lang="bash" class="language-bash">sudo apt update
+sudo apt install xfce4 xfce4-goodies</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Append following lines to &nbsp;<code>~/.bashrc</code>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Display forwarding settings" class="wp-block-code"><code lang="bash" class="language-bash">export DISPLAY=$(awk '/nameserver / {print $2; exit}' /etc/resolv.conf 2&gt;/dev/null):0
+export LIBGL_ALWAYS_INDIRECT=1</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Reboot WSL distribution.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Windows settings</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Install X Server: <a href="https://sourceforge.net/projects/vcxsrv/">VcXsrv Windows X Server download | SourceForge.net</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":209,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/07/image-8.png" alt="" class="wp-image-209" /><br />
+<figcaption>Change VcXsrv launcher DPI settings.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Start <code>xLaunch.exe</code> and select display settings, most of them are optional and you can choose what you like. "Disable access control" is required, without it WSL distribution can't communicate with host.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":239,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/07/image-11.png" alt="" class="wp-image-239" /><br />
+<figcaption>Display settings, I found that multiple windows works best for me.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:image {"id":240,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/07/image-12.png" alt="" class="wp-image-240" /><br />
+<figcaption>When new WSL distribution connects, you can execute or start some default applications.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:image {"id":213,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/07/image-10.png" alt="" class="wp-image-213" /><br />
+<figcaption>Disable access control must be enabled.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:heading --></p>
+<h2>Running applications</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now that we have everything set up we can run some applications.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>You can run individual applications, like <code>xCalc</code></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":241,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/07/image-13.png" alt="" class="wp-image-241" /><br />
+<figcaption>Run individual applications.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Or you can start full desktop experience by running <code>startxfce4</code></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":243,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/07/image-14-1024x537.png" alt="" class="wp-image-243" /><br />
+<figcaption>Full desktop experience in WSL 2.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Please note that not all applications will start, some of them might have issues or crash.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Considering my initial goal and what this book provided, I'm really happy and would recommend this book. I took only small portion what it provides and will definitely come back to it when my needs increase.  </p>
+<p><!-- /wp:paragraph --></p>

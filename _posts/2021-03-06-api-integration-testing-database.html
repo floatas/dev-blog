@@ -1,0 +1,177 @@
+---
+layout: post
+title: 'ASP.NET CORE Integration tests: Database'
+date: 2021-03-06 10:47:31.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- Software Development
+tags:
+- database
+- Flyway
+- PostgreSQL
+meta:
+  _edit_last: '1'
+  ct_author_last_updated: default
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/2021/03/06/api-integration-testing-database/"
+---
+<p><!-- wp:paragraph --></p>
+<p>In this multi part blog post I will try to walk through integration testing from sending HTTP request to executing database queries against real DB. Approach that we gonna take will fit new projects as well ass legacy, where database has some hardcoded values.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>All source code can be found at my <a href="https://github.com/FloatInCodeBlog/IntegrationDatabase" data-type="URL" data-id="https://github.com/FloatInCodeBlog/IntegrationDatabase" target="_blank" rel="noreferrer noopener">GitHub</a>, clone repository, and run <code>rebuild.cmd</code> to get started right away.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="Project structure" class="wp-block-code"><code lang="bash" class="language-bash line-numbers"> │   docker-compose.yml
+ │   init.sql
+ │   migrate-prod.bat
+ │   rebuild.cmd
+ │
+ └───migrations
+     │   Dockerfile
+     │   flyway.conf
+     │
+     └───scripts
+             V1_0_0.sql</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Lets start from top we have <code>docker-compose.yml</code> file gluing all pieces together.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="docker-compose.yml" class="wp-block-code"><code lang="docker" class="language-docker line-numbers">version:&nbsp;'3.4'
+services:
+&nbsp;&nbsp;postgres-shop:
+&nbsp;&nbsp;&nbsp;&nbsp;image:&nbsp;postgres:12.1
+&nbsp;&nbsp;&nbsp;&nbsp;container_name:&nbsp;postgres-shop
+&nbsp;&nbsp;&nbsp;&nbsp;volumes:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-&nbsp;./init.sql:/docker-entrypoint-initdb.d/init.sql
+&nbsp;&nbsp;&nbsp;&nbsp;environment:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-&nbsp;POSTGRES_USER=postgres
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-&nbsp;POSTGRES_PASSWORD=postgres
+&nbsp;&nbsp;&nbsp;&nbsp;ports:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-&nbsp;6444:5432
+&nbsp;&nbsp;migrations-shop:
+&nbsp;&nbsp;&nbsp;&nbsp;container_name:&nbsp;migrations-shop
+&nbsp;&nbsp;&nbsp;&nbsp;command:&nbsp;migrate
+&nbsp;&nbsp;&nbsp;&nbsp;depends_on:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-&nbsp;postgres-shop
+&nbsp;&nbsp;&nbsp;&nbsp;build:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;context:&nbsp;./migrations
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dockerfile:&nbsp;./Dockerfile</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>In order to run migrations flyway has to connect to database, we will take advantage of PostgreSQL initialization script and create database with user after database start.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="init.sql" class="wp-block-code"><code lang="sql" class="language-sql">CREATE&nbsp;ROLE&nbsp;admin_user&nbsp;WITH&nbsp;LOGIN&nbsp;PASSWORD&nbsp;'secretPassword123!';
+
+CREATE&nbsp;DATABASE&nbsp;rental;
+GRANT&nbsp;ALL&nbsp;PRIVILEGES&nbsp;ON&nbsp;DATABASE&nbsp;rental&nbsp;TO&nbsp;admin_user;</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:group --></p>
+<div class="wp-block-group">
+<div class="wp-block-group__inner-container"><!-- wp:paragraph --></p>
+<p>This is just an example how to run flyway on your machine when you want to apply migrations to your production server. For this to work <strong>download flyway and add it to</strong> your system <strong>path variable</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="migrate-prod.bat" class="wp-block-code"><code lang="bash" class="language-bash">flyway&nbsp;-url=jdbc:postgresql://&lt;ip&gt;:&lt;port&gt;/&lt;database&gt;&nbsp;-configFiles=%~dp0\migrations\flyway.conf&nbsp;-locations=filesystem:%~dp0\migrations\scripts&nbsp;migrate</code></pre>
+<p><!-- /wp:code --></div>
+</div>
+<p><!-- /wp:group --></p>
+<p><!-- wp:paragraph --></p>
+<p>Flyway folder contains all data required to build custom flyway docker image with custom configs and migration scripts.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="Dockerfile" class="wp-block-code"><code lang="docker" class="language-docker line-numbers">FROM&nbsp;flyway/flyway:6.0.2-alpine
+COPY&nbsp;scripts/*&nbsp;/flyway/sql/
+COPY&nbsp;flyway.conf&nbsp;/flyway/conf/</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Truncated version of <code>flyway.conf</code>, with properties that are set. PostgreSQL database and flyway will be running in docker, so we can combine all docker references and newly created database information: server, user, password.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="flyway.conf" class="wp-block-code"><code lang="bash" class="language-bash line-numbers">#&nbsp;JDBC&nbsp;url&nbsp;to&nbsp;use&nbsp;to&nbsp;connect&nbsp;to&nbsp;the&nbsp;database
+#&nbsp;Examples
+#&nbsp;--------
+#&nbsp;Most&nbsp;drivers&nbsp;are&nbsp;included&nbsp;out&nbsp;of&nbsp;the&nbsp;box.
+#&nbsp;*&nbsp;=&nbsp;JDBC&nbsp;driver&nbsp;must&nbsp;be&nbsp;downloaded&nbsp;and&nbsp;installed&nbsp;in&nbsp;/drivers&nbsp;manually
+#&nbsp;**&nbsp;=&nbsp;TNS_ADMIN&nbsp;environment&nbsp;variable&nbsp;must&nbsp;point&nbsp;to&nbsp;the&nbsp;directory&nbsp;of&nbsp;where&nbsp;tnsnames.ora&nbsp;resides
+#&nbsp;PostgreSQL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;jdbc:postgresql://&lt;host&gt;:&lt;port&gt;/&lt;database&gt;?&lt;key1&gt;=&lt;value1&gt;&amp;&lt;key2&gt;=&lt;value2&gt;...
+flyway.url=jdbc:postgresql://postgres-shop/rental?user=admin_user&amp;password=secretPassword123!
+
+#&nbsp;Fully&nbsp;qualified&nbsp;classname&nbsp;of&nbsp;the&nbsp;JDBC&nbsp;driver&nbsp;(autodetected&nbsp;by&nbsp;default&nbsp;based&nbsp;on&nbsp;flyway.url)
+#&nbsp;flyway.driver=
+
+#&nbsp;User&nbsp;to&nbsp;use&nbsp;to&nbsp;connect&nbsp;to&nbsp;the&nbsp;database.&nbsp;Flyway&nbsp;will&nbsp;prompt&nbsp;you&nbsp;to&nbsp;enter&nbsp;it&nbsp;if&nbsp;not&nbsp;specified.
+flyway.user=admin_user
+
+#&nbsp;Password&nbsp;to&nbsp;use&nbsp;to&nbsp;connect&nbsp;to&nbsp;the&nbsp;database.&nbsp;Flyway&nbsp;will&nbsp;prompt&nbsp;you&nbsp;to&nbsp;enter&nbsp;it&nbsp;if&nbsp;not&nbsp;specified.
+flyway.password=secretPassword123!
+
+#&nbsp;The&nbsp;maximum&nbsp;number&nbsp;of&nbsp;retries&nbsp;when&nbsp;attempting&nbsp;to&nbsp;connect&nbsp;to&nbsp;the&nbsp;database.&nbsp;After&nbsp;each&nbsp;failed&nbsp;attempt,
+#&nbsp;Flyway&nbsp;will&nbsp;wait&nbsp;1&nbsp;second&nbsp;before&nbsp;attempting&nbsp;to&nbsp;connect&nbsp;again,&nbsp;up&nbsp;to&nbsp;the&nbsp;maximum&nbsp;number&nbsp;of&nbsp;times&nbsp;specified
+#&nbsp;by&nbsp;connectRetries.&nbsp;(default:&nbsp;0)
+flyway.connectRetries=360
+
+#&nbsp;Comma-separated&nbsp;list&nbsp;of&nbsp;schemas&nbsp;managed&nbsp;by&nbsp;Flyway.&nbsp;These&nbsp;schema&nbsp;names&nbsp;are&nbsp;case-sensitive.
+#&nbsp;Consequences:
+#&nbsp;-&nbsp;Flyway&nbsp;will&nbsp;automatically&nbsp;attempt&nbsp;to&nbsp;create&nbsp;all&nbsp;these&nbsp;schemas,&nbsp;unless&nbsp;the&nbsp;first&nbsp;one&nbsp;already&nbsp;exists.
+#&nbsp;-&nbsp;The&nbsp;first&nbsp;schema&nbsp;in&nbsp;the&nbsp;list&nbsp;will&nbsp;be&nbsp;automatically&nbsp;set&nbsp;as&nbsp;the&nbsp;default&nbsp;one&nbsp;during&nbsp;the&nbsp;migration.
+#&nbsp;-&nbsp;The&nbsp;first&nbsp;schema&nbsp;in&nbsp;the&nbsp;list&nbsp;will&nbsp;also&nbsp;be&nbsp;the&nbsp;one&nbsp;containing&nbsp;the&nbsp;schema&nbsp;history&nbsp;table.
+#&nbsp;-&nbsp;The&nbsp;schemas&nbsp;will&nbsp;be&nbsp;cleaned&nbsp;in&nbsp;the&nbsp;order&nbsp;of&nbsp;this&nbsp;list.
+#&nbsp;-&nbsp;If&nbsp;Flyway&nbsp;created&nbsp;them,&nbsp;the&nbsp;schemas&nbsp;themselves&nbsp;will&nbsp;as&nbsp;be&nbsp;dropped&nbsp;when&nbsp;cleaning.
+#&nbsp;(default:&nbsp;The&nbsp;default&nbsp;schema&nbsp;for&nbsp;the&nbsp;database&nbsp;connection)
+flyway.schemas=public,rental
+
+#&nbsp;Name&nbsp;of&nbsp;Flyway's&nbsp;schema&nbsp;history&nbsp;table&nbsp;(default:&nbsp;flyway_schema_history)
+#&nbsp;By&nbsp;default&nbsp;(single-schema&nbsp;mode)&nbsp;the&nbsp;schema&nbsp;history&nbsp;table&nbsp;is&nbsp;placed&nbsp;in&nbsp;the&nbsp;default&nbsp;schema&nbsp;for&nbsp;the&nbsp;connection
+#&nbsp;provided&nbsp;by&nbsp;the&nbsp;datasource.
+#&nbsp;When&nbsp;the&nbsp;flyway.schemas&nbsp;property&nbsp;is&nbsp;set&nbsp;(multi-schema&nbsp;mode),&nbsp;the&nbsp;schema&nbsp;history&nbsp;table&nbsp;is&nbsp;placed&nbsp;in&nbsp;the&nbsp;first
+#&nbsp;schema&nbsp;of&nbsp;the&nbsp;list.
+flyway.table=schema_migrations
+
+#&nbsp;The&nbsp;version&nbsp;to&nbsp;tag&nbsp;an&nbsp;existing&nbsp;schema&nbsp;with&nbsp;when&nbsp;executing&nbsp;baseline.&nbsp;(default:&nbsp;1)
+flyway.baselineVersion=1
+
+#&nbsp;The&nbsp;description&nbsp;to&nbsp;tag&nbsp;an&nbsp;existing&nbsp;schema&nbsp;with&nbsp;when&nbsp;executing&nbsp;baseline.&nbsp;(default:&nbsp;&lt;&lt;&nbsp;Flyway&nbsp;Baseline&nbsp;&gt;&gt;)
+flyway.baselineDescription=Initial&nbsp;version
+
+#&nbsp;Whether&nbsp;to&nbsp;automatically&nbsp;call&nbsp;baseline&nbsp;when&nbsp;migrate&nbsp;is&nbsp;executed&nbsp;against&nbsp;a&nbsp;non-empty&nbsp;schema&nbsp;with&nbsp;no&nbsp;schema&nbsp;history
+#&nbsp;table.&nbsp;This&nbsp;schema&nbsp;will&nbsp;then&nbsp;be&nbsp;initialized&nbsp;with&nbsp;the&nbsp;baselineVersion&nbsp;before&nbsp;executing&nbsp;the&nbsp;migrations.
+#&nbsp;Only&nbsp;migrations&nbsp;above&nbsp;baselineVersion&nbsp;will&nbsp;then&nbsp;be&nbsp;applied.
+#&nbsp;This&nbsp;is&nbsp;useful&nbsp;for&nbsp;initial&nbsp;Flyway&nbsp;production&nbsp;deployments&nbsp;on&nbsp;projects&nbsp;with&nbsp;an&nbsp;existing&nbsp;DB.
+#&nbsp;Be&nbsp;careful&nbsp;when&nbsp;enabling&nbsp;this&nbsp;as&nbsp;it&nbsp;removes&nbsp;the&nbsp;safety&nbsp;net&nbsp;that&nbsp;ensures
+#&nbsp;Flyway&nbsp;does&nbsp;not&nbsp;migrate&nbsp;the&nbsp;wrong&nbsp;database&nbsp;in&nbsp;case&nbsp;of&nbsp;a&nbsp;configuration&nbsp;mistake!&nbsp;(default:&nbsp;false)
+flyway.baselineOnMigrate=true</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Finally <code>Scripts</code> folder contains all migration scripts. There are multiple ways to configure script file naming, for this example simple V{major}_{minor}_{patch} naming is sufficient. Scripts will be executed in order, based on versioning.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now that we have all the pieces ready, lets run <code>docker-compose</code> . To make things easier I wrote small script: stop all containers, clear cache (this is necessary in order to rebuild flyway docker container with new script files), start all containers and apply migrations.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code {"lineNumbers":false} --></p>
+<pre title="rebuild.cmd" class="wp-block-code"><code lang="bash" class="language-bash">docker-compose&nbsp;down
+docker-compose&nbsp;build&nbsp;--no-cache
+docker-compose&nbsp;up</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Running <code>rebuild.cmd</code> will start PostgreSQL, initialize it by creating our user and database. Flyway will be started as soon as PostgreSQL starts up and will log few warnings. It takes few seconds for the database to become available. Finally, scripts will be executed, results can be viewed in <code>public.schema_migrations</code> table.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":40,"width":785,"height":124,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large is-resized"><img src="{{ site.baseurl }}/assets/2021/03/image-1024x162.png" alt="" class="wp-image-40" width="785" height="124" /><br />
+<figcaption>Flyway migration table</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>In this blog post, we looked at a simple approach to start a local database in docker and run migrations. PostgreSQL can be replaced by any other database, flyway supports dozen of them, even flyway can be replaced by other migration running tools. I used this migration approach in work and in my personal projects, we haven't found any drawbacks or limitations. When working with a legacy database initialization can be done from a backup, when working in larger teams I would recommend using different versioning and running scripts <code>out of order</code>.</p>
+<p><!-- /wp:paragraph --></p>

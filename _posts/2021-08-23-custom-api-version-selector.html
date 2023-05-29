@@ -1,0 +1,160 @@
+---
+layout: post
+title: Custom API version selector
+date: 2021-08-23 06:08:00.000000000 +03:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- Software Development
+tags:
+- ".NET"
+- API
+- C#
+- Versioning
+meta:
+  _edit_last: '1'
+  ct_author_last_updated: default
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/2021/08/23/custom-api-version-selector/"
+---
+<p><!-- wp:paragraph --></p>
+<p>In this blog post, I will demonstrate how to write a custom .NET CORE API version selector. While it's easy and libraries provided all the necessary information to do that, you should weigh the pros and cons before doing so. The implementation that I will share below is used in API which communicates with the web and two mobile apps (IOS, Android), while at first, this custom version selection seemed a great idea, after some time it looks more like a ticking time bomb. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Source code at <a rel="noreferrer noopener" href="https://github.com/FloatInCodeBlog/ApiCustomEndpointVersioning" data-type="URL" data-id="https://github.com/FloatInCodeBlog/ApiCustomEndpointVersioning" target="_blank">GitHub</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Implementation</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Install <code>Microsoft.AspNetCore.Mvc.Versioning</code> nuget package.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Two identical methods with different api versions for testing." class="wp-block-code"><code lang="csharp" class="language-csharp">        [HttpGet]
+        [ApiVersion("1.0")]
+        public WeatherResponse Get()
+        {
+            var rng = new Random();
+            var respones = new WeatherResponse
+            {
+                Forecasts = Enumerable.Range(1, 5).Select(index =&gt; new WeatherForecast
+                {
+                    Date = DateTime.Now.AddDays(index),
+                    TemperatureC = rng.Next(-20, 55),
+                    Summary = Summaries[rng.Next(Summaries.Length)]
+                }),
+                ApiVersion = "1.0"
+            };
+
+            return respones;
+        }
+
+        [HttpGet]
+        [ApiVersion("2.0")]
+        public WeatherResponse Get_v2()
+        {
+            var rng = new Random();
+            var respones = new WeatherResponse
+            {
+                Forecasts = Enumerable.Range(1, 5).Select(index =&gt; new WeatherForecast
+                {
+                    Date = DateTime.Now.AddDays(index),
+                    TemperatureC = rng.Next(-20, 55),
+                    Summary = Summaries[rng.Next(Summaries.Length)]
+                }),
+                ApiVersion = "2.0"
+            };
+
+            return respones;
+        }</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="Versioning configuration" class="wp-block-code"><code lang="csharp" class="language-csharp">services.AddApiVersioning(options =&gt;
+{
+    options.ReportApiVersions = true;
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    //Important to version reader ALWAYS report version as missing
+    options.ApiVersionReader = new HeaderApiVersionReader("custom-version-selection-works-only-if-api-version-is-not-specified");
+
+    options.ApiVersionSelector = new HighestUpToSpecifiedIncludedVersionSelector(new ApiVersion(2, 0));
+});</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><code>ApiVersion</code> has extension to parse version object from string, <code>SelectVersion</code> method has all the information required to decide which method to select. What's left is for us to make decision and implement our custom version selector.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Custom version selection. Select highest up to specified version" class="wp-block-code"><code lang="csharp" class="language-csharp">    public class HighestUpToSpecifiedIncludedVersionSelector : IApiVersionSelector
+    {
+        private readonly ApiVersion _defaultVersion;
+
+        public HighestUpToSpecifiedIncludedVersionSelector(ApiVersion defaultVersion)
+        {
+            _defaultVersion = defaultVersion;
+        }
+
+        public ApiVersion SelectVersion(HttpRequest request, ApiVersionModel model)
+        {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+
+            var requestedVersion = ParseVersion(request) ?? _defaultVersion;
+
+            var selectedVersion = model.ImplementedApiVersions.Count switch
+            {
+                0 =&gt; _defaultVersion,
+                1 =&gt; model.ImplementedApiVersions[0].Status == null ? model.ImplementedApiVersions[0] : _defaultVersion,
+                _ =&gt; model.ImplementedApiVersions
+                   .Where(v =&gt; v.Status == null &amp;&amp; v &lt;= requestedVersion)
+                   .Max(v =&gt; v) ?? _defaultVersion
+            };
+
+            return selectedVersion;
+        }
+
+        private static ApiVersion ParseVersion(HttpRequest request)
+        {
+            if (!request.Headers.TryGetValue("api-version", out var version))
+                return null;
+
+            if (string.IsNullOrEmpty(version) || version.Count != 1)
+                return null;
+
+            return ApiVersion.TryParse(version[0], out var apiVersion) ? apiVersion : null;
+        }
+    }</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:image {"id":316,"sizeSlug":"full","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-full"><img src="{{ site.baseurl }}/assets/2021/08/image.png" alt="" class="wp-image-316" /><br />
+<figcaption>Sending request without version will execute default version endpoint, which in this case is 2.0</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":317,"width":645,"height":326,"sizeSlug":"full","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-full is-resized"><img src="{{ site.baseurl }}/assets/2021/08/image-1.png" alt="" class="wp-image-317" width="645" height="326" /><br />
+<figcaption>Specifying version that doesn't exist we get smallest up to that version, in this case it's 1.0</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>We used this approach in mobile application. Would I use it again ? No. As of right now we don't make any breaking changes to the API, only small bug fixes. With this versioning style, if we already have v2.0 endpoint and mobile app is using it, we can't create new v2.0 endpoint for other controller, if we do, mobile app will start to use it immediately and will break.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>It's good to know that you can change version selection, but it's best to fail if endpoint or version is not found.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>

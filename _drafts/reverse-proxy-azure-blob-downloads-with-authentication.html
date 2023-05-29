@@ -1,0 +1,176 @@
+---
+layout: post
+title: Reverse proxy Azure Blob downloads with authentication
+date:
+type: post
+parent_id: '0'
+published: false
+password: ''
+status: draft
+categories: []
+tags: []
+meta:
+  _oembed_36cd3a22cf6d22e14d488366436a90a8: "{{unknown}}"
+  _edit_last: '1'
+  ct_author_last_updated: default
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/"
+---
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>How to download Azure Blob using an HTTP request</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Method: GET</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="File download URL structure" class="wp-block-code"><code lang="bash" class="language-bash">https://{ACOUNT_NAME}.blob.core.windows.net/{CONTAINER}/{PATH_IN_STORAGE}/{FILENAME}.{FILE_EXTENSION}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="File download URL example" class="wp-block-code"><code lang="bash" class="language-bash">https://PhotoBlobs.blob.core.windows.net/personal-photos/2022/08/image001.jpg</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Headers:</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>x-ms-date - Current date time, example: Thu, 25 Aug 2022 07:46:06 GMT</li>
+<li>x-ms-version - Static value: 2017-04-17</li>
+<li>Authorization - Request hash: {ACCOUNT_NAME}:{REQUEST_HASH}</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:image {"id":432,"sizeSlug":"full","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-full"><img src="{{ site.baseurl }}/assets/image.png" alt="" class="wp-image-432" /><br />
+<figcaption>Azure Blob download request in Postman</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Authorization</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The most complex part is to get Authorization SharedKey, which is generated from the entire HTTP request + AccountKey + AccountName.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><a href="https://github.com/Azure-Samples/storage-dotnet-rest-api-with-auth/blob/master/StorageRestApiAuth/AzureStorageAuthenticationHelper.cs">storage-dotnet-rest-api-with-auth/AzureStorageAuthenticationHelper.cs at master · Azure-Samples/storage-dotnet-rest-api-with-auth (github.com)</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Apply authorization header" class="wp-block-code"><code lang="csharp" class="language-csharp">DateTime now = DateTime.UtcNow;
+httpRequestMessage.Headers.Add("x-ms-date", now.ToString("R", CultureInfo.InvariantCulture));
+httpRequestMessage.Headers.Add("x-ms-version", "2017-04-17");
+// If you need any additional headers, add them here before creating
+//   the authorization header. 
+
+// Add the authorization header.
+httpRequestMessage.Headers.Authorization = AzureStorageAuthenticationHelper.GetAuthorizationHeader(storageAccountName, storageAccountKey, now, httpRequestMessage);</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Reverse proxy HTTP requests to Azure Blob storage</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>For reverse proxy, we will be using <a rel="noreferrer noopener" href="https://github.com/microsoft/reverse-proxy" data-type="URL" data-id="https://github.com/microsoft/reverse-proxy" target="_blank">Yarp.ReverseProxy</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="appsettings.json changes for reverse proxy" class="wp-block-code"><code lang="json" class="language-json">"ReverseProxy": {
+    "Routes": {
+        "blobRoute": {
+            "AuthorizationPolicy": "authenticatedPolicy",
+            "ClusterId": "azureBlobStorageCluster",
+            "Match": {
+                "Path": "/v1/photos/{**blobUrl}"
+            },
+            "Transforms": [
+                {
+                    "PathPattern": "{**blobUrl}"
+                }
+            ]
+        }
+    },
+    "Clusters": {
+        "azureBlobStorageCluster": {
+            "Destinations": {
+                "destination1": {
+                    "Address": "urlIsBuiltInReverseProxyConfiguration"
+                }
+            }
+        }
+    }
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="Startup.cs changes for reverse proxy" class="wp-block-code"><code lang="csharp" class="language-csharp">public void ConfigureServices(IServiceCollection services)
+{
+    //Some parts have been removed for clarity
+        
+    services.AddAuthorization(options =>
+    {
+        options.AddPolicy("authenticatedPolicy", policy =>
+            policy.RequireAuthenticatedUser());
+    });
+
+    services.AddBlobReverseProxy(Configuration);
+
+}
+
+
+public void Configure(IApplicationBuilder app, IWebHostEnvironment env, SettingsLoggingService settingsLogging)
+{
+    //Some parts have been removed for clarity
+
+    app.UseEndpoints(endpoints =>
+    {
+        endpoints.MapControllers();
+        endpoints.MapReverseProxy();
+    });
+
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="Reverse proxy configuration" class="wp-block-code"><code lang="csharp" class="language-csharp">public static class ReverseProxyConfiguration
+{
+    public static void AddBlobReverseProxy(this IServiceCollection services, IConfiguration configuration)
+    {
+        var proxyBuilder = services.AddReverseProxy();
+        proxyBuilder.LoadFromConfig(configuration.GetSection("ReverseProxy"))
+            .AddTransforms(context =>
+            {
+                var azureSettings = context.Services.GetRequiredService&lt;IOptions&lt;StorageSettings>>();
+
+                var storageAccount = CloudStorageAccount.Parse(azureSettings.Value.ConnectionString);
+                var baseUrl = $"{storageAccount.BlobEndpoint}{azureSettings.Value.Container}/";
+
+                context.AddRequestTransform(AddAzureBlobAuthentication(baseUrl));
+            });
+    }
+
+    private static Func&lt;RequestTransformContext, ValueTask> AddAzureBlobAuthentication(string baseUrl)
+    {
+        return requestContext =>
+        {
+            var requestedFilePath = requestContext.Path.ToString().Trim('/');
+
+            requestContext.ProxyRequest.RequestUri = new Uri(baseUrl + requestedFilePath);
+            requestContext.ProxyRequest.Headers.Add("x-ms-date", DateTime.UtcNow.ToString("R", CultureInfo.InvariantCulture));
+            requestContext.ProxyRequest.Headers.Add("x-ms-version", "2017-04-17");
+
+            requestContext.ProxyRequest.Headers.Authorization = AzureStorageAuthenticationHelper.GetAuthorizationHeader(
+                   "storageAccountName", "storageAccountKey", DateTime.UtcNow, requestContext.ProxyRequest);
+
+            return ValueTask.CompletedTask;
+        };
+    }
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>

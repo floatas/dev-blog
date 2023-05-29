@@ -1,0 +1,325 @@
+---
+layout: post
+title: 'ASP.NET CORE Integration tests: API'
+date: 2021-03-29 03:34:41.000000000 +03:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- Software Development
+tags:
+- API
+- C#
+- Moq
+- testing
+meta:
+  _edit_last: '1'
+  ct_author_last_updated: default
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/2021/03/29/asp-net-core-integration-tests-api/"
+---
+<p><!-- wp:paragraph --></p>
+<p>All source code can be found at my <a rel="noreferrer noopener" href="https://github.com/FloatInCodeBlog/ApiIntegrationTests" target="_blank" data-type="URL" data-id="https://github.com/FloatInCodeBlog/ApiIntegrationTests">GitHub</a>, clone repository, and run all tests.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:group --></p>
+<div class="wp-block-group">
+<div class="wp-block-group__inner-container"><!-- wp:paragraph --></p>
+<p>In this blog post, I will cover how to use <code>WebApplicationFactory</code> and how to build <code>IWebHost</code> and <code>IHost</code> manually for testing. Then we will see how to replace services for both hosting types without custom mock services as well as <code>Moq</code>.</p>
+<p><!-- /wp:paragraph --></div>
+</div>
+<p><!-- /wp:group --></p>
+<p><!-- wp:paragraph --></p>
+<p>For testing, we will use the default <code>WeatherForecastController</code>,  all logic will be moved to service in order to demonstrate how to replace that service for testing.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="Weather forecast controller" class="wp-block-code"><code lang="csharp" class="language-csharp line-numbers">&nbsp;&nbsp;&nbsp;&nbsp;[ApiController]
+&nbsp;&nbsp;&nbsp;&nbsp;[Route("[controller]")]
+&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;class&nbsp;WeatherForecastController&nbsp;:&nbsp;ControllerBase
+&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;private&nbsp;readonly&nbsp;IWeatherService&nbsp;_weatherService;
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;WeatherForecastController(IWeatherService&nbsp;weatherService)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_weatherService&nbsp;=&nbsp;weatherService;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[HttpGet]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;IEnumerable&lt;WeatherForecast&gt;&nbsp;Get()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;_weatherService.Get();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="Weather service" class="wp-block-code"><code lang="csharp" class="language-csharp line-numbers"><code>
+<code>&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;class&nbsp;WeatherService&nbsp;:&nbsp;IWeatherService
+&nbsp;&nbsp;&nbsp;&nbsp;{
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;private&nbsp;static&nbsp;readonly&nbsp;string[]&nbsp;Summaries&nbsp;=&nbsp;new[]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"Freezing",&nbsp;"Bracing",&nbsp;"Chilly",&nbsp;"Cool",&nbsp;"Mild",&nbsp;"Warm",&nbsp;"Balmy",&nbsp;"Hot",&nbsp;"Sweltering",&nbsp;"Scorching"
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;};
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;IEnumerable&lt;WeatherForecast&gt;&nbsp;Get()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;rng&nbsp;=&nbsp;new&nbsp;Random();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;Enumerable.Range(1,&nbsp;5).Select(index&nbsp;=&gt;&nbsp;new&nbsp;WeatherForecast
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Date&nbsp;=&nbsp;DateTime.Now.AddDays(index),
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;TemperatureC&nbsp;=&nbsp;rng.Next(-20,&nbsp;55),
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Summary&nbsp;=&nbsp;Summaries[rng.Next(Summaries.Length)]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;})
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ToArray();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}</code></code></code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Testing with <code>WebApplicationFactory</code></h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The easiest and fastest way to get started writing tests. <code>Host</code> building logic will be taken care of for you. However mocking services will be much more difficult compared to building <code>Host</code> by yourself.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In both cases <code>IHost</code> and <code>IWebHost</code> test class will be identical.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="IClassFixture with WebApplicationFactory" class="wp-block-code"><code lang="csharp" class="language-csharp line-numbers">&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;class&nbsp;WeatherForecastControllerTests&nbsp;:&nbsp;IClassFixture&lt;TestHostProjectFactory&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;private&nbsp;HttpClient&nbsp;_client;
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;WeatherForecastControllerTests(TestHostProjectFactory&nbsp;factory)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_client&nbsp;=&nbsp;factory.CreateClient();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Fact]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;async&nbsp;Task&nbsp;GetWeatherForecast()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;result&nbsp;=&nbsp;await&nbsp;_client.GetStringAsync("WeatherForecast");
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;expected&nbsp;=&nbsp;WeatherServiceMock.FakeData;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;actual&nbsp;=&nbsp;JsonConvert.DeserializeObject&lt;IEnumerable&lt;WeatherForecast&gt;&gt;(result);
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;comparer&nbsp;=&nbsp;new&nbsp;CompareLogic();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;compareResult&nbsp;=&nbsp;comparer.Compare(expected,&nbsp;actual);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Assert.True(compareResult.AreEqual,&nbsp;compareResult.DifferencesString);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>WebHost</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="WebHost test factory" class="wp-block-code"><code lang="csharp" class="language-csharp line-numbers">&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;class&nbsp;TestWebHostProjectFactory&nbsp;:&nbsp;WebApplicationFactory&lt;Startup&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;protected&nbsp;override&nbsp;void&nbsp;ConfigureWebHost(IWebHostBuilder&nbsp;builder)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;builder
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.UseEnvironment("Test")
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ConfigureTestServices(services&nbsp;=&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;services.Replace(ServiceDescriptor.Transient&lt;IWeatherService,&nbsp;WeatherServiceMock&gt;());
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Host</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="Host test factory" class="wp-block-code"><code lang="csharp" class="language-csharp line-numbers">&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;class&nbsp;TestHostProjectFactory&nbsp;:&nbsp;WebApplicationFactory&lt;Startup&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;protected&nbsp;override&nbsp;IHost&nbsp;CreateHost(IHostBuilder&nbsp;builder)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;builder
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.UseEnvironment("Test")
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ConfigureServices(services&nbsp;=&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;services.Replace(ServiceDescriptor.Transient&lt;IWeatherService,&nbsp;WeatherServiceMock&gt;());
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;base.CreateHost(builder);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>When comparing both WebApplicationFactories we can see that there is only one difference. <code>WebHost</code> <code>ConfigureTestServices</code> and in <code>Host</code> we have <code>ConfigureServices</code>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This method has one drawback, that you have to know and mock all services. For example, if you want to mock <code>ServiceA</code> for one test and <code>ServiceB</code> for another test, then you would have some issues. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Create host directly in test</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Previously we looked at how to replace service in <code>WebApplicationFactory</code> but it really limits tests, since tests need different services to be mocked. By creating host directly in tests we will have fine-grained control on which services are mocked and even take control of make things easier.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>WebHost</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="Dynamic service mock in WebHost" class="wp-block-code"><code lang="csharp" class="language-csharp line-numbers">[Fact]
+public&nbsp;async&nbsp;Task&nbsp;GetWeatherForecastMoq()
+{
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;mock&nbsp;=&nbsp;new&nbsp;Mock&lt;IWeatherService&gt;();
+
+&nbsp;&nbsp;&nbsp;&nbsp;using&nbsp;var&nbsp;host&nbsp;=&nbsp;new&nbsp;HostBuilder()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ConfigureWebHost(webBuilder&nbsp;=&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;webBuilder
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.UseTestServer()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.UseStartup&lt;Startup&gt;()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//ConfigureTestServices&nbsp;must&nbsp;be&nbsp;bellow&nbsp;UseStartup
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ConfigureTestServices(services&nbsp;=&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;services.Replace(ServiceDescriptor.Transient(_&nbsp;=&gt;&nbsp;mock.Object));
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;})
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.Build();
+&nbsp;&nbsp;&nbsp;&nbsp;await&nbsp;host.StartAsync();
+
+&nbsp;&nbsp;&nbsp;&nbsp;mock.Setup(_&nbsp;=&gt;&nbsp;_.Get()).Returns(WeatherServiceMock.FakeData);
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;_client&nbsp;=&nbsp;host.GetTestServer().CreateClient();
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;result&nbsp;=&nbsp;await&nbsp;_client.GetStringAsync("WeatherForecast");
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;expected&nbsp;=&nbsp;WeatherServiceMock.FakeData;
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;actual&nbsp;=&nbsp;JsonConvert.DeserializeObject&lt;IEnumerable&lt;WeatherForecast&gt;&gt;(result);
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;comparer&nbsp;=&nbsp;new&nbsp;CompareLogic();
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;compareResult&nbsp;=&nbsp;comparer.Compare(expected,&nbsp;actual);
+&nbsp;&nbsp;&nbsp;&nbsp;Assert.True(compareResult.AreEqual,&nbsp;compareResult.DifferencesString);
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Host</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="Dynamic service mock in Host" class="wp-block-code"><code lang="csharp" class="language-csharp line-numbers">[Fact]
+public&nbsp;async&nbsp;Task&nbsp;GetWeatherForecastMoq()
+{
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;mock&nbsp;=&nbsp;new&nbsp;Mock&lt;IWeatherService&gt;();
+
+&nbsp;&nbsp;&nbsp;&nbsp;using&nbsp;var&nbsp;host&nbsp;=&nbsp;new&nbsp;HostBuilder()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ConfigureWebHost(webBuilder&nbsp;=&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;webBuilder
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.UseTestServer()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.UseStartup&lt;Startup&gt;();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;})
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ConfigureServices(services&nbsp;=&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;services.Replace(ServiceDescriptor.Transient(_&nbsp;=&gt;&nbsp;mock.Object));
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;})
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.Build();
+&nbsp;&nbsp;&nbsp;&nbsp;await&nbsp;host.StartAsync();
+
+&nbsp;&nbsp;&nbsp;&nbsp;mock.Setup(_&nbsp;=&gt;&nbsp;_.Get()).Returns(WeatherServiceMock.FakeData);
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;_client&nbsp;=&nbsp;host.GetTestServer().CreateClient();
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;result&nbsp;=&nbsp;await&nbsp;_client.GetStringAsync("WeatherForecast");
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;expected&nbsp;=&nbsp;WeatherServiceMock.FakeData;
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;actual&nbsp;=&nbsp;JsonConvert.DeserializeObject&lt;IEnumerable&lt;WeatherForecast&gt;&gt;(result);
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;comparer&nbsp;=&nbsp;new&nbsp;CompareLogic();
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;compareResult&nbsp;=&nbsp;comparer.Compare(expected,&nbsp;actual);
+&nbsp;&nbsp;&nbsp;&nbsp;Assert.True(compareResult.AreEqual,&nbsp;compareResult.DifferencesString);
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>As in a previous example there is only one main difference, <code>WebHost</code> has special method to configure services <code>ConfigureTestServices</code> while <code>Host</code> has to call default <code>ConfigureServices</code> method. Also it is really important where you call service configuratiom method. <strong>Service configuration method must be after <code>UseStartup</code>.</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Code cleanup</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>As in all final steps, lets do some code cleanup and make tests a bit easier to read and code more reusable.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="HttpClientFactory" class="wp-block-code"><code lang="csharp" class="language-csharp line-numbers">public&nbsp;class&nbsp;HttpClientFactory
+{
+&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;async&nbsp;Task&lt;HttpClient&gt;&nbsp;GetAsync(Action&lt;IServiceCollection&gt;&nbsp;configureServices)
+&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;host&nbsp;=&nbsp;new&nbsp;HostBuilder()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ConfigureWebHost(webBuilder&nbsp;=&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;webBuilder
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.UseTestServer()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.UseStartup&lt;Startup&gt;();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;})
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ConfigureServices(configureServices)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.Build();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;await&nbsp;host.StartAsync();
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;host.GetTestServer().CreateClient();
+&nbsp;&nbsp;&nbsp;&nbsp;}
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code {"lineNumbers":true} --></p>
+<pre title="Code cleanup on tests" class="wp-block-code"><code lang="csharp" class="language-csharp line-numbers">[Fact]
+public&nbsp;async&nbsp;Task&nbsp;GetWeatherForecastMoqCustomBuilder()
+{
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;mock&nbsp;=&nbsp;new&nbsp;Mock&lt;IWeatherService&gt;();
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;_client&nbsp;=&nbsp;await&nbsp;new&nbsp;HttpClientFactory()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.GetAsync(services&nbsp;=&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;services.Replace(ServiceDescriptor.Transient(_&nbsp;=&gt;&nbsp;mock.Object));
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+
+&nbsp;&nbsp;&nbsp;&nbsp;mock.Setup(_&nbsp;=&gt;&nbsp;_.Get()).Returns(WeatherServiceMock.FakeData);
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;result&nbsp;=&nbsp;await&nbsp;_client.GetStringAsync("WeatherForecast");
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;expected&nbsp;=&nbsp;WeatherServiceMock.FakeData;
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;actual&nbsp;=&nbsp;JsonConvert.DeserializeObject&lt;IEnumerable&lt;WeatherForecast&gt;&gt;(result);
+
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;comparer&nbsp;=&nbsp;new&nbsp;CompareLogic();
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;compareResult&nbsp;=&nbsp;comparer.Compare(expected,&nbsp;actual);
+&nbsp;&nbsp;&nbsp;&nbsp;Assert.True(compareResult.AreEqual,&nbsp;compareResult.DifferencesString);
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Building Host vs using default Host builder</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>In these examples I created <code>Host</code> from scratch, however, most projects use default host builder.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Create Host from scratch" class="wp-block-code"><code lang="csharp" class="language-csharp">new HostBuilder()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Switching to default builder saves some time, since it configures quite a few things for you, including settings.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Using default Host builder" class="wp-block-code"><code lang="csharp" class="language-csharp">Host.CreateDefaultBuilder()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>In this post, we saw how easy it is to start writing integration tests for API projects. We covered two different hosting methods <code>IWebHost</code> and <code>IHost</code> and identified the main differences on how to mock services. While <code>WebApplicationFactory</code> is easier to get started, manually creating host in tests gives much better control of how services are mocked.</p>
+<p><!-- /wp:paragraph --></p>

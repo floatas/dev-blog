@@ -1,0 +1,63 @@
+---
+layout: post
+title: 'ASP.NET CORE Integration tests: Entity framework DB first'
+date: 2021-05-10 06:10:52.000000000 +03:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- Software Development
+tags:
+- API
+- C#
+- database
+- DB-First
+- EntityFramework
+- testing
+meta:
+  _edit_last: '1'
+  ct_author_last_updated: default
+  _wp_old_date: '2021-05-08'
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/2021/05/10/asp-net-core-integration-tests-entity-framework-db-first/"
+---
+<p><!-- wp:paragraph --></p>
+<p>In this short blog post I want to show how useful EF DB first approach is when testing. While working with legacy project you might now have endpoints to set all data in DB for test, also validating exact data in DB get easier.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Generate code from the database</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Install two Nuget packages in a project that will contain DB files: <a rel="noreferrer noopener" href="https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Design/" data-type="URL" data-id="https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Design/" target="_blank">Microsoft.EntityFrameworkCore.Design</a> and <a rel="noreferrer noopener" href="https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/6.0.0-preview3" data-type="URL" data-id="https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/6.0.0-preview3" target="_blank">Npgsql.EntityFrameworkCore.PostgreSQL</a> don't forget to rebuild the solution.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Next install <a rel="noreferrer noopener" href="https://docs.microsoft.com/en-us/ef/core/cli/dotnet" data-type="URL" data-id="https://docs.microsoft.com/en-us/ef/core/cli/dotnet" target="_blank">dotnet-ef</a> global tool and invoke it with following configuration. Tool has variety of configuration parameters, but for the sake of simplicity we will use only minimal set.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="generate.cmd" class="wp-block-code"><code lang="bash" class="language-bash">dotnet&nbsp;ef&nbsp;dbcontext&nbsp;scaffold&nbsp;"Server=127.0.0.1;Port=6444;Database=weather;User&nbsp;Id=admin_user;Password=secretPassword123!;"&nbsp;Npgsql.EntityFrameworkCore.PostgreSQL&nbsp;--output-dir&nbsp;Weather&nbsp;--no-onconfiguring&nbsp;--force</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>At this point we should have all necessary files to change dapper into EF.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Only a few changes are needed, create DataAccess inject database string, and use an entity framework in your project or tests. Source code is always available at <a rel="noreferrer noopener" href="https://github.com/FloatInCodeBlog/ApiIntegrationTests/tree/entity-framework-db-first" data-type="URL" data-id="https://github.com/FloatInCodeBlog/ApiIntegrationTests/tree/entity-framework-db-first" target="_blank">GitHub</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>In memory</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Why ? If someone is using EF code first on enterprise, please let me know how it's going.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>I find Entity Framework is really helpful in tests, you can easily add data to DB and validate if tests performed correct changes to DB. When the database changes, you only need to run <code>generate.cmd</code> script to update all code and if there are issues, they are in compile-time, which makes maintenance and updates easy. </p>
+<p><!-- /wp:paragraph --></p>

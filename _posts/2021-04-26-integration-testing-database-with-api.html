@@ -1,0 +1,105 @@
+---
+layout: post
+title: 'ASP.NET CORE Integration tests: Database with API'
+date: 2021-04-26 04:56:54.000000000 +03:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- Software Development
+tags:
+- API
+- C#
+- database
+- testing
+meta:
+  _edit_last: '1'
+  ct_author_last_updated: default
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/2021/04/26/integration-testing-database-with-api/"
+---
+<p><!-- wp:paragraph --></p>
+<p>Now that we have database migrations and API integration tests set up we can combine them together. In this post, I will go through some tips and tools that proved to be really helpful. <a rel="noreferrer noopener" href="https://github.com/FloatInCodeBlog/ApiIntegrationTests/tree/with-db" data-type="URL" data-id="https://github.com/FloatInCodeBlog/ApiIntegrationTests/tree/with-db" target="_blank">Source code.</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Double-check that you are using test DB</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The first thing that you should be doing is make sure you are running tests in test environment. Usually when working we switch our connection strings to our QA or even one of our production databases, the least that we want is to corrupt these databases.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This check will vary from project to project, I usually check client or user count in DB, for tests, there shouldn't be that many, at least for our tests.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Check if tests are using test DB" class="wp-block-code"><code lang="csharp" class="language-csharp">var&nbsp;maxAllowedEntries&nbsp;=&nbsp;100;
+
+using&nbsp;var&nbsp;conn&nbsp;=&nbsp;new&nbsp;NpgsqlConnection(settings.Value.ConnectionString);
+
+var&nbsp;entries&nbsp;=&nbsp;await&nbsp;conn.ExecuteScalarAsync&lt;int&gt;("select&nbsp;count(*)&nbsp;from&nbsp;weather_predictions.predictions");
+
+return&nbsp;entries&nbsp;&lt;&nbsp;maxAllowedEntries;</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Disable test concurrency</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>We have one test DB, logically we can only run one test at a time. This can be controlled with collections.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Disable concurrency with attribute" class="wp-block-code"><code lang="csharp" class="language-csharp">[Collection(nameof(NotThreadSafeResourceCollection))]
+public class WeatherForecastControllerDatabaseTests
+{</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="Attribute to disable concurrency" class="wp-block-code"><code lang="csharp" class="language-csharp">[CollectionDefinition(nameof(NotThreadSafeResourceCollection),&nbsp;DisableParallelization&nbsp;=&nbsp;true)]
+public&nbsp;class&nbsp;NotThreadSafeResourceCollection
+{
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Clear database after each test with Respawn</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is possible to restart docker and rebuild the entire database after each test but that would take a lot of time. <a href="https://www.nuget.org/packages/Respawn/" data-type="URL" data-id="https://www.nuget.org/packages/Respawn/" target="_blank" rel="noreferrer noopener">Respawn </a>NuGet allows us to clear the database, either full or partial with initialization scripts.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Clear database data before each test" class="wp-block-code"><code lang="csharp" class="language-csharp">var&nbsp;checkpoint&nbsp;=&nbsp;new&nbsp;Checkpoint
+{
+&nbsp;&nbsp;&nbsp;&nbsp;TablesToIgnore&nbsp;=&nbsp;new&nbsp;string[]&nbsp;{&nbsp;},
+&nbsp;&nbsp;&nbsp;&nbsp;SchemasToInclude&nbsp;=&nbsp;new&nbsp;string[]&nbsp;{&nbsp;},
+&nbsp;&nbsp;&nbsp;&nbsp;DbAdapter&nbsp;=&nbsp;DbAdapter.Postgres
+};
+using&nbsp;var&nbsp;conn&nbsp;=&nbsp;new&nbsp;NpgsqlConnection(settings.Value.ConnectionString);
+await&nbsp;conn.OpenAsync();
+
+await&nbsp;checkpoint.Reset(conn);</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Comparing objects</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>For object comparison, I highly recommend using <a rel="noreferrer noopener" href="https://www.nuget.org/packages/CompareNETObjects" data-type="URL" data-id="https://www.nuget.org/packages/CompareNETObjects" target="_blank">Compare-Net-Objects</a>, this NuGet will cover all the use cases that you need.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Ignore order when comparing lists" class="wp-block-code"><code lang="csharp" class="language-csharp">//When&nbsp;we&nbsp;ignore&nbsp;collection&nbsp;order&nbsp;we&nbsp;must&nbsp;specify&nbsp;key&nbsp;which&nbsp;will&nbsp;be&nbsp;used&nbsp;to&nbsp;match&nbsp;actual&nbsp;with&nbsp;expected
+comparer.Config.IgnoreCollectionOrder&nbsp;=&nbsp;true;
+comparer.Config.CollectionMatchingSpec.Add(typeof(WeatherForecast),&nbsp;new&nbsp;List&lt;string&gt;&nbsp;{&nbsp;nameof(WeatherForecast.Date)&nbsp;});</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="Custom comparer for one object property" class="wp-block-code"><code lang="csharp" class="language-csharp">//Summary&nbsp;will&nbsp;be&nbsp;random,&nbsp;we&nbsp;don't&nbsp;really&nbsp;care&nbsp;about&nbsp;in&nbsp;this&nbsp;test.&nbsp;Check&nbsp;if&nbsp;it's&nbsp;not&nbsp;null.
+comparer.Config.CustomPropertyComparer&lt;WeatherForecast&gt;(obj&nbsp;=&gt;&nbsp;obj.Summary,
+&nbsp;&nbsp;&nbsp;&nbsp;new&nbsp;CustomComparer&lt;string,&nbsp;string&gt;((expected,&nbsp;actual)&nbsp;=&gt;&nbsp;!string.IsNullOrEmpty(actual)));</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>In order to run tests fluently some gluing is needed. The first thing should be security, make sure you are using test DB and not production or another shared database. Since only one test can be running at any given time - make sure to configure concurrency, otherwise, you will have to debug a lot of random failing tests due to multiple tests writing data to DB. Lastly comparing objects should be easy, instead of writing tons of helpers invest some time and look into Compare-Net-Objects it's highly customizable and will cover all your cases.</p>
+<p><!-- /wp:paragraph --></p>

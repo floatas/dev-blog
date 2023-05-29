@@ -1,0 +1,303 @@
+---
+layout: post
+title: ".NET Transaction scope"
+date: 2021-09-06 06:30:00.000000000 +03:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- Software Development
+tags:
+- ".NET"
+- C#
+- database
+- testing
+- transaction
+meta:
+  _edit_last: '1'
+  ct_author_last_updated: default
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/2021/09/06/transaction-scope/"
+---
+<p><!-- wp:paragraph --></p>
+<p>This blog post was moved from the old blog.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:separator --></p>
+<hr class="wp-block-separator" />
+<!-- /wp:separator --></p>
+<p><!-- wp:paragraph --></p>
+<p>One way to learn something new is to write unit tests exploring a new library, that is what I'll be doing in this blog post. For tests, we will use xUnit and for database Npgsql.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Let's explore different use cases of transaction scope. We will see how transactions behave when they are nested and how exceptions are handled on different nesting levels.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Since we are using async/await workflow we need to enable&nbsp;<code>TransactionScopeAsyncFlowOption.Enabled</code>&nbsp;on our transactions.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Enable transaction scope</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list {"ordered":true} --></p>
+<ol>
+<li>Include&nbsp;<code>Enlist=true</code>&nbsp;in your connection string.</li>
+<li>Call&nbsp;<code>connection.EnlistTransaction(Transaction.Current);</code></li>
+</ol>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Newer versions of Npgsql have enlisting enabled by default.&nbsp;</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Setup functions and constants used throughout testing</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre title="Test setup and configuration" class="wp-block-code"><code lang="csharp" class="language-csharp">private readonly string ConnectionString = "DATABASE=transaction_test;PORT=5432;USER ID=postgres;PASSWORD=postgres;HOST=localhost;";
+
+private readonly string InsertTableAEntryQuery = @"INSERT INTO public.TestTableA(value) VALUES (@value);";
+private readonly string InsertTableBEntryQuery = @"INSERT INTO public.TestTableB(value) VALUES (@value);";
+
+private readonly string TableARowCountQuery = @"SELECT count(*) FROM public.TestTableA;";
+private readonly string TableBRowCountQuery = @"SELECT count(*) FROM public.TestTableB;";
+
+private async Task ClearDatabase()
+{
+    await using var connection = new NpgsqlConnection(this.ConnectionString);
+
+    await connection.ExecuteAsync("DELETE FROM public.TestTableA");
+    await connection.ExecuteAsync("DELETE FROM public.TestTableB");
+}
+
+private async Task&lt;int&gt; TableARowCount()
+{
+    await using var connection = new NpgsqlConnection(ConnectionString);
+    return await connection.QuerySingleAsync&lt;int&gt;(TableARowCountQuery);
+}
+
+private async Task&lt;int&gt; TableBRowCount()
+{
+    await using var connection = new NpgsqlConnection(ConnectionString);
+    return await connection.QuerySingleAsync&lt;int&gt;(TableBRowCountQuery);
+}
+
+private async Task ThrowException()
+{
+    await using var connection = new NpgsqlConnection(this.ConnectionString);
+    using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+    throw new Exception();
+}
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>White smoke test to make sure we have everything setup correctly</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre title="Simple test to make sure everything is connected and working." class="wp-block-code"><code class="">[Fact]
+public async Task ConnectionIsWorking()
+{
+    await ClearDatabase();
+    await using var connection = new NpgsqlConnection(ConnectionString);
+
+    // Note: no need to open connection
+    // Dapper will open it for us
+
+    await connection.ExecuteAsync(InsertTableAEntryQuery, new { value = 123 });
+    await connection.ExecuteAsync(InsertTableBEntryQuery, new { value = 321 });
+
+    Assert.Equal(1, await TableARowCount());
+    Assert.Equal(1, await TableBRowCount());
+}
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Throwing exception before transaction complete should roll back transaction</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre title="Simple test to see if changes are rolled back if exception is thrown." class="wp-block-code"><code class="">[Fact]
+public async Task SimpleTransactionRollbackOnException()
+{
+    await ClearDatabase();
+
+    using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+    {
+        try
+        {
+            await using var connection = new NpgsqlConnection(ConnectionString);
+
+            await connection.ExecuteAsync(InsertTableAEntryQuery, new { value = 123 });
+
+            await ThrowException();
+
+            scope.Complete();
+        }
+        catch { }
+    }
+
+    Assert.Equal(0, await TableARowCount());
+    Assert.Equal(0, await TableBRowCount());
+}
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Even if we catch exception, we still can't complete transaction since connection state is set to aborted</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre title="Exceptions inside transaction will prevent its completion." class="wp-block-code"><code class="">[Fact]
+public async Task SimpleTransactionRollbackOnException2()
+{
+    await ClearDatabase();
+    try
+    {
+        using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+        await using var connection2 = new NpgsqlConnection(ConnectionString);
+
+        try
+        {
+            await using var connection = new NpgsqlConnection(ConnectionString);
+            await connection.ExecuteAsync(InsertTableAEntryQuery, new { value = 123 });
+
+            await ThrowException();
+
+        }
+        catch { }
+
+        scope.Complete();
+    }
+    catch (TransactionAbortedException)
+    {
+        Assert.True(true);
+    }
+    catch
+    {
+        Assert.True(false);
+    }
+}
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Forgetting to call Complete will fail to save changes silently</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre title="Transactions must be completed explicitly in order to persist changes" class="wp-block-code"><code class="">[Fact]
+public async Task SimpleTransactionRollbackWithoutComplete()
+{
+    await ClearDatabase();
+
+    using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+
+        await connection.ExecuteAsync(InsertTableAEntryQuery, new { value = 123 });
+        await connection.ExecuteAsync(InsertTableBEntryQuery, new { value = 321 });
+
+        //Forgot to call complete
+        //scope.Complete();
+    }
+
+    Assert.Equal(0, await TableARowCount());
+    Assert.Equal(0, await TableBRowCount());
+}
+
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Nesting transaction scopes and having multiple complete functions will work fine</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre title="Transactions can be nested." class="wp-block-code"><code class="">[Fact]
+public async Task NestedTransactionsBothHavingComplete()
+{
+    await ClearDatabase();
+
+    using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+
+        await connection.ExecuteAsync(InsertTableAEntryQuery, new { value = 123 });
+
+        await NestedTransactionWithCompleteInside();
+
+        scope.Complete();
+    }
+
+    Assert.Equal(1, await TableARowCount());
+    Assert.Equal(1, await TableBRowCount());
+}
+
+private async Task NestedTransactionWithCompleteInside()
+{
+    using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+    await using var connection = new NpgsqlConnection(ConnectionString);
+
+    await connection.ExecuteAsync(InsertTableBEntryQuery, new { value = 321 });
+
+    scope.Complete();
+}
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Root transaction will fail when nested transaction isn't completed</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre title="All transactions must be completed explicitly" class="wp-block-code"><code class="">[Fact]
+public async Task NestedTransactionsOnlyRootWithComplete()
+{
+    await ClearDatabase();
+
+    try
+    {
+        using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+        await using var connection = new NpgsqlConnection(ConnectionString);
+
+        await connection.ExecuteAsync(InsertTableAEntryQuery, new { value = 123 });
+
+        await NestedTransactionWithoutCompleteInside();
+
+        scope.Complete();
+    }
+    catch (TransactionAbortedException)
+    {
+        Assert.True(true);
+    }
+    catch
+    {
+        Assert.True(false);
+    }
+}
+
+private async Task NestedTransactionWithoutCompleteInside()
+{
+    using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+    await using var connection = new NpgsqlConnection(ConnectionString);
+
+    await connection.ExecuteAsync(InsertTableBEntryQuery, new { value = 321 });
+}
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>If we nest transactions, all of them succeed or all of them will fail.</li>
+<li>Don't forget to call transaction scope complete method.</li>
+<li>Transaction complete method will fail if connection is in invalid state due to exception.</li>
+</ul>
+<p><!-- /wp:list --></p>

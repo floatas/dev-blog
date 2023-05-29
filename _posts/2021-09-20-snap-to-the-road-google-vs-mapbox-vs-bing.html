@@ -1,0 +1,125 @@
+---
+layout: post
+title: 'Snap to the road: Google vs Mapbox vs Bing'
+date: 2021-09-20 11:34:00.000000000 +03:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- Software Development
+tags:
+- bing
+- google
+- map
+- mapbox
+- research
+- snap-to-road
+meta:
+  _edit_last: '1'
+  ct_author_last_updated: default
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/2021/09/20/snap-to-the-road-google-vs-mapbox-vs-bing/"
+---
+<p><!-- wp:paragraph --></p>
+<p>Recently did some research about snap-to-road functionality. In this blog post, I will try to share results and compare some edge cases where coordinates are missing or GPS noise is present.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Tech stack: Angular, leaflet with map box map provider.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>Red - actual coordinates</li>
+<li>Blue - Mapbox</li>
+<li>Green - Google</li>
+<li>Purple - Bing</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:image {"id":361,"width":645,"height":736,"sizeSlug":"full","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-full is-resized"><img src="{{ site.baseurl }}/assets/2021/09/image.png" alt="" class="wp-image-361" width="645" height="736" /><br />
+<figcaption>Bing road interpolation works over longer road periods, but at the same time, it ignores visite to gas stations. Mapbox and Google acknowledge fact that there were few coordinates at the gas station</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:image {"id":362,"width":645,"height":558,"sizeSlug":"full","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-full is-resized"><img src="{{ site.baseurl }}/assets/2021/09/image-1.png" alt="" class="wp-image-362" width="645" height="558" /><br />
+<figcaption>Mapbox, Google, and actual coordinates go as a straight line, however, bing interpolates large distance coordinate jump.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:image {"id":363,"sizeSlug":"full","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-full"><img src="{{ site.baseurl }}/assets/2021/09/image-2.png" alt="" class="wp-image-363" /><br />
+<figcaption>A strange example of how Google decided to stop interpolation and just draw straight lines for some reason. Bing is the winner for this scenario, perfectly snapped to the road.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:image {"id":364,"width":645,"height":777,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large is-resized"><img src="{{ site.baseurl }}/assets/2021/09/image-3-849x1024.png" alt="" class="wp-image-364" width="645" height="777" /><br />
+<figcaption>Great example showing different interpolation algorithms between Mapbox and Google. Google makes a corner, while Bing just continues straight.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:image {"id":366,"sizeSlug":"full","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-full"><img src="{{ site.baseurl }}/assets/2021/09/image-4.png" alt="" class="wp-image-366" /><br />
+<figcaption>Goole tries to make a corner but gives up in the middle.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Mapbox only provides snap to closest road and this is clearly visible when we compare with Google and Bing snap to the road with interpolation.  </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Latitude,Longitude or Longitude,Latitude</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>This was a long-lasting question and now I know that there is no correct answer.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p> Latitude,Longitude  - Google, Bing</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p> Longitude,Latitude  - Mapbox</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Final thoughts</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:table --></p>
+<figure class="wp-block-table">
+<table />
+<tbody />
+<tr>
+<td></td>
+<td>Google</td>
+<td>MapBox</td>
+<td>Bing</td>
+</tr>
+<tr>
+<td>Price</td>
+<td>10 USD per 1000 requests</td>
+<td>2 USD per 1000 requests</td>
+<td>Unable to find, need to contact with exact quote.</td>
+</tr>
+<tr>
+<td>Snap-to-road</td>
+<td>Great</td>
+<td>Doesn't have</td>
+<td>Best</td>
+</tr>
+<tr>
+<td>Road selection</td>
+<td>Tries to make much more turns and include all original points in the route.</td>
+<td>The closest road can be configured with max distance from the point (5-50meters).</td>
+<td>Will try to interpolate a straight road and will ignore some coordinates to do so.</td>
+</tr>
+</figure>
+<p><!-- /wp:table --></p>
+<p><!-- wp:paragraph --></p>
+<p>It won't be fair to compare accuracy, I'm drawing all roads on MapBox tiles.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Bing will try to keep going straight when interpolating, while Google will wiggle around and try to include all points in the interpolated route. This brings to the main difference, Bing is more likely to remove original points to make a route while Google is more likely to add points in between.  </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>There is no winner, this research showed fundamental differences between these providers. Based on the situation all of them are valid options.</p>
+<p><!-- /wp:paragraph --></p>

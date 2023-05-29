@@ -1,0 +1,220 @@
+---
+layout: post
+title: 'Mapster: generate dto, async after map actions, dependency injection'
+date: 2021-07-26 05:35:00.000000000 +03:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- Software Development
+tags:
+- ".NET"
+- C#
+- code-generation
+- DI
+- mapper
+meta:
+  _edit_last: '1'
+  ct_author_last_updated: default
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/2021/07/26/mapster-generate-dto-async-after-map-actions-dependency-injection/"
+---
+<p><!-- wp:paragraph --></p>
+<p><a rel="noreferrer noopener" href="https://github.com/MapsterMapper/Mapster" data-type="URL" data-id="https://github.com/MapsterMapper/Mapster" target="_blank">Mapster </a>brings some new ideas to object mapping world. Model generation, async custom actions after map, dependency injection. In this post, I will try to explore these new ideas. Source code can be found on <a rel="noreferrer noopener" href="https://github.com/floatas/MapsterTest" data-type="URL" data-id="https://github.com/floatas/MapsterTest" target="_blank">GitHub</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Getting started</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>In your solution folder run the following commands to enable dotnet tools and install mapster code generator.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Enable dotnet tools in solution directory." class="wp-block-code"><code lang="bash" class="language-bash">dotnet new tool-manifest</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Enabling tool manifest in the solution directory will create a local configuration file, which will help other team members to install the same tools for the project.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Mapster code generation dotnet tool." class="wp-block-code"><code lang="bash" class="language-bash">dotnet tool install Mapster.Tool</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Mapster provides several ways to <a rel="noreferrer noopener" href="https://github.com/MapsterMapper/Mapster/wiki/Mapster.Tool" data-type="URL" data-id="https://github.com/MapsterMapper/Mapster/wiki/Mapster.Tool" target="_blank">generate mapping files</a>, for this example, let's generate automatically after build.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Clean generated files." class="wp-block-code"><code lang="xml" class="language-xml"><code>&nbsp;&nbsp;&nbsp;&nbsp;&lt;ItemGroup&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;Generated&nbsp;Include="**\*.g.cs"&nbsp;/&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;/ItemGroup&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;Target&nbsp;Name="CleanGenerated"&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;Delete&nbsp;Files="@(Generated)"&nbsp;/&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;/Target&gt;</code></code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="Generate Mapster mapping files after build." class="wp-block-code"><code lang="xml" class="language-xml">&lt;Target&nbsp;Name="Mapster"&nbsp;AfterTargets="AfterBuild"&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;Exec&nbsp;WorkingDirectory="$(ProjectDir)"&nbsp;Command="dotnet&nbsp;tool&nbsp;restore"&nbsp;/&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;Exec&nbsp;WorkingDirectory="$(ProjectDir)"&nbsp;Command="dotnet&nbsp;mapster&nbsp;model&nbsp;-a&nbsp;&amp;quot;$(TargetDir)$(ProjectName).dll&amp;quot;"&nbsp;/&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;Exec&nbsp;WorkingDirectory="$(ProjectDir)"&nbsp;Command="dotnet&nbsp;mapster&nbsp;extension&nbsp;-a&nbsp;&amp;quot;$(TargetDir)$(ProjectName).dll&amp;quot;"&nbsp;/&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&lt;Exec&nbsp;WorkingDirectory="$(ProjectDir)"&nbsp;Command="dotnet&nbsp;mapster&nbsp;mapper&nbsp;-a&nbsp;&amp;quot;$(TargetDir)$(ProjectName).dll&amp;quot;"&nbsp;/&gt;
+&lt;/Target&gt;</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>One thing to keep in mind, code generation is done <strong>after build</strong>. If you change mapster configs and start the project, nothing will change. Correct flow is <strong>build project and then start it</strong>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Mapster.Tool will scan assembly and use config files to generate models." class="wp-block-code"><code lang="csharp" class="language-csharp">&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;class&nbsp;MapsterConfig&nbsp;:&nbsp;ICodeGenerationRegister
+&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;void&nbsp;Register(CodeGenerationConfig&nbsp;config)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.AdaptTo("[name]Dto")
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ForType&lt;WeatherForecast&gt;();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Advanced model generation</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre title="Ignore and change property name." class="wp-block-code"><code lang="csharp" class="language-csharp">public&nbsp;class&nbsp;MapsterConfig&nbsp;:&nbsp;ICodeGenerationRegister
+{
+&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;void&nbsp;Register(CodeGenerationConfig&nbsp;config)
+&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.AdaptTo("[name]Dto")
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.ForType&lt;WeatherForecast&gt;(
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cfg&nbsp;=&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cfg.Ignore(poco&nbsp;=&gt;&nbsp;poco.TemperatureC);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cfg.Map(poco&nbsp;=&gt;&nbsp;poco.Summary,&nbsp;"MappedSummary");
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;&nbsp;&nbsp;}
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>The model can be modified by ignoring, renaming, changing the type of the property.   <strong>When you change the property name, you MUST map that property manually.</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Map property explicitly." class="wp-block-code"><code lang="csharp" class="language-csharp">TypeAdapterConfig&lt;WeatherForecast,&nbsp;WeatherForecastDto&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;.NewConfig()
+&nbsp;&nbsp;&nbsp;&nbsp;.Map(dest&nbsp;=&gt;&nbsp;dest.MappedSummary,&nbsp;src&nbsp;=&gt;&nbsp;src.Summary);</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Type safety</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p><code>RequireExplicitMapping</code> will make sure that all mappings should be registered. <code>RequireDestinationMemberSource</code> checks if all destination properties have mappings. <code>.Compile()</code> will perform all checks at compile time and throw exceptions if there are any issues.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Runtime and compile time mapping validation." class="wp-block-code"><code lang="csharp" class="language-csharp">TypeAdapterConfig.GlobalSettings.RequireExplicitMapping&nbsp;=&nbsp;true;
+TypeAdapterConfig.GlobalSettings.RequireDestinationMemberSource&nbsp;=&nbsp;true;
+TypeAdapterConfig.GlobalSettings.Compile();</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>After map actions</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>AfterMapping extension allows you to execute code after mapping is done and do final modifications to result if needed.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="AfterMapping function." class="wp-block-code"><code lang="csharp" class="language-csharp">TypeAdapterConfig&lt;WeatherForecast,&nbsp;WeatherForecastDto&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;.NewConfig()
+&nbsp;&nbsp;&nbsp;&nbsp;.Map(dest&nbsp;=&gt;&nbsp;dest.MappedSummary,&nbsp;src&nbsp;=&gt;&nbsp;src.Summary)
+&nbsp;&nbsp;&nbsp;&nbsp;.AfterMapping((dest,&nbsp;d)&nbsp;=&gt;&nbsp;{&nbsp;d.MappedSummary&nbsp;=&nbsp;"AfterMapping&nbsp;"&nbsp;+&nbsp;d.MappedSummary;&nbsp;});</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Dependency Injection and async after map actions</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>For dependency injection to work we need to change how mapper is used. Configuration and mapping must be switched from static instances to services. First, we must configure required services by adding singleton for all mapping configurations and scoped mapping service.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Configure Mapster DI" class="wp-block-code"><code lang="csharp" class="language-csharp">public&nbsp;void&nbsp;ConfigureServices(IServiceCollection&nbsp;services)
+{
+&nbsp;&nbsp;&nbsp;&nbsp;//configure&nbsp;mapster
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;config&nbsp;=&nbsp;new&nbsp;TypeAdapterConfig();
+&nbsp;&nbsp;&nbsp;&nbsp;services.AddSingleton(config);
+&nbsp;&nbsp;&nbsp;&nbsp;services.AddScoped&lt;IMapper,&nbsp;ServiceMapper&gt;();
+
+&nbsp;&nbsp;&nbsp;&nbsp;TypeAdapterConfig.GlobalSettings.RequireExplicitMapping&nbsp;=&nbsp;true;
+&nbsp;&nbsp;&nbsp;&nbsp;TypeAdapterConfig.GlobalSettings.RequireDestinationMemberSource&nbsp;=&nbsp;true;
+&nbsp;&nbsp;&nbsp;&nbsp;TypeAdapterConfig.GlobalSettings.Compile();
+&nbsp;&nbsp;&nbsp;&nbsp;//-------
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>For testing purposes, I created three services all of them return time when they were created.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Mapping definitions must be also declared using DI" class="wp-block-code"><code lang="csharp" class="language-csharp">public&nbsp;void&nbsp;Configure(IApplicationBuilder&nbsp;app,&nbsp;IWebHostEnvironment&nbsp;env,&nbsp;TypeAdapterConfig&nbsp;config)
+{
+&nbsp;&nbsp;&nbsp;&nbsp;//Mapping&nbsp;configurations
+&nbsp;&nbsp;&nbsp;&nbsp;config.NewConfig&lt;WeatherForecast,&nbsp;WeatherForecastDto&gt;()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.Map(dest&nbsp;=&gt;&nbsp;dest.MappedSummary,&nbsp;src&nbsp;=&gt;&nbsp;src.Summary)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.AfterMappingAsync(async&nbsp;(dest)&nbsp;=&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Thread.Sleep(1000);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;transient&nbsp;=&nbsp;await&nbsp;MapContext.Current.GetService&lt;TransientService&gt;().DateAsync();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;scoped&nbsp;=&nbsp;await&nbsp;MapContext.Current.GetService&lt;ScopedService&gt;().DateAsync();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;singleton&nbsp;=&nbsp;await&nbsp;MapContext.Current.GetService&lt;SingletonService&gt;().DateAsync();
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dest.MappedSummary&nbsp;=&nbsp;$"{transient},&nbsp;{scoped},&nbsp;{singleton}";
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;&nbsp;&nbsp;//--------</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Mapping function itself also change to async version.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Using IMapper service." class="wp-block-code"><code lang="csharp" class="language-csharp">private&nbsp;readonly&nbsp;IMapper&nbsp;_mapper;
+
+public&nbsp;WeatherForecastController(IMapper&nbsp;mapper)
+{
+&nbsp;&nbsp;&nbsp;&nbsp;_mapper&nbsp;=&nbsp;mapper;
+}
+
+[HttpGet]
+public&nbsp;async&nbsp;Task&lt;IEnumerable&lt;WeatherForecastDto&gt;&gt;&nbsp;Get()
+{
+&nbsp;&nbsp;&nbsp;&nbsp;var&nbsp;result&nbsp;=&nbsp;new&nbsp;List&lt;WeatherForecastDto&gt;();
+
+&nbsp;&nbsp;&nbsp;&nbsp;foreach&nbsp;(var&nbsp;forecast&nbsp;in&nbsp;Forecasts())
+&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;result.Add(await&nbsp;_mapper.From(forecast)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.AdaptToTypeAsync&lt;WeatherForecastDto&gt;());
+&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;result;
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now that we have all the required services, we can do a simple test. Execute endpoint twice and compare dates to see if service instances were created as expected.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":292,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/07/image.png" alt="" class="wp-image-292" /><br />
+<figcaption>First-run results.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:image {"id":293,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/07/image-1.png" alt="" class="wp-image-293" /><br />
+<figcaption>Second run results.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Transient service results change for each temperature value, scoped service time is the same for request and singleton always shows the same date. From this simple test we see that DI and service scope in mapping works as we expect.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Mapster brings really great additions to otherwise mundane mapping. Code generation, after map actions, dependency injection are things that more and more often come to mind while working on a large legacy project, and from the initial look, Mapster handles these cases pretty well.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>There are still some questions unanswered: how does it handle complex objects? testing I saw in github that some people had issues with concurrency. Code maintainability, since part of logic, would be moved to mapping.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>I'm looking forward to using this library in my next project.</p>
+<p><!-- /wp:paragraph --></p>

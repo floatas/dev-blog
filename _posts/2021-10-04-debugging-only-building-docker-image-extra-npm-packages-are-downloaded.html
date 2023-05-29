@@ -1,0 +1,94 @@
+---
+layout: post
+title: 'Debugging: Only building docker image extra npm packages are downloaded'
+date: 2021-10-04 16:05:36.000000000 +03:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- Software Development
+tags:
+- debugging
+- thought-process
+- witch-hunt
+meta:
+  _edit_last: '1'
+  ct_author_last_updated: default
+  _wp_old_date: '2021-10-03'
+  _pingme: '1'
+  _encloseme: '1'
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/2021/10/04/debugging-only-building-docker-image-extra-npm-packages-are-downloaded/"
+---
+<p><!-- wp:paragraph --></p>
+<p>I'm working on the hybrid angular web application. We did update the angular version and released it to our QA environment, everything went fine until we tried to release it to our other QA environment which is using docker. Angular build failed with the following error, indicating that two type definition packages are exporting the same types.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In this blog post, I will walk through the thought process that helped me debug this problem.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Locally on our windows laptop build works fine, azure windows pipelines work fine, but docker builds fail everywhere.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="When two type definitions export same types, following error will be thrown on build." class="wp-block-code"><code class="">#12 87.41
+#12 87.41 ERROR in node_modules/@types/googlemaps/reference/map.d.ts:1:1 - error TS6200: Definitions of the following identifiers conflict with those in another file: BicyclingLayer, Map, HYBRID, ROADMAP, SATELLITE, TERRAIN, MapTypeRegistry, TrafficLayer, TransitLayer
+#12 87.41
+#12 87.41 1 declare namespace google.maps {
+#12 87.41   ~~~~~~~
+#12 87.41
+#12 87.41   node_modules/@types/google.maps/index.d.ts:18:1
+#12 87.41     18 declare namespace google.maps {</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>From the error above we can see that there are two packages <code> @types/googlemaps </code> and <code> @types/google.maps </code> which provide the same type of definitions.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Thought process</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>We upgraded the angular major version, this resulted in a large portion of our other packages being upgraded as well. The first thought was that some have a new dependency, but this doesn't explain why our windows build agents can build successfully. When building on windows <code> @types/google.maps</code> package is not present in <code>node_modules</code> directory.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>After some searching in the project, installed packages and online, still nothing. The next step that came to my mind is to check the docker file system for this mysterious package. With a few commands, I had docker up and running with the project inside it.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="First command will create docker image and second will run that image with interactive console." class="wp-block-code"><code lang="bash" class="language-bash"> docker build . -t ng-debug-build
+ 
+ docker run -it ng-debug-build /bin/ash</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>This showed that docker indeed had  <code> @types/google.maps</code> installed. Can npm packages have dependencies based on the operating system? New google quest was born and search continued. The answer is - no.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Well if we don't have it on windows build, we don't have it in our package.json, it must be installed by someone. Using <code>bisection search</code> on <code>dependencies</code> and <code>devDependencies</code> I was able to find that <code>@typesmarkerclusterer</code> package was installing additional dependencies when building project in docker.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":379,"sizeSlug":"large","linkDestination":"none","className":"is-style-default"} --></p>
+<figure class="wp-block-image size-large is-style-default"><img src="{{ site.baseurl }}/assets/2021/10/image-5-1024x543.png" alt="" class="wp-image-379" /></figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>I'm still not sure why we don't have issues on our windows azure build agent, it might be that we have some sort of cache that I'm not aware of.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The issue was that <code>@types/google-map</code> package changed its dependency. Our angular application has <code>@types/googlemaps</code> but when this package changed its dependence conflicts arose. <code>@types/markerclustererplus</code> has wildcard major version dependency on <code>@types/google-maps</code>, and this situation is a perfect example of why you shouldn't do that!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Solution</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Since we are using yarn we override internal package versions. We simply rolled back to <code>@types/google-maps</code> version that uses same <code>@types/googlemaps</code> dependency.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Yarn provides a way to override internal package versions" class="wp-block-code"><code lang="javascript" class="language-javascript">    "resolutions": {
+        "@types/markerclustererplus/**/@types/google-maps": "3.2.1"
+    }</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>This is a perfect example demonstrating how careful you should be about versions that you specify in dependencies. Overall I'm pretty happy with this bug that we had, it led to great examples of bad code, helped me learn new things, such as resolutions, and showed that problem solving has room for improvement, since some steps took a bit longer than anticipated.</p>
+<p><!-- /wp:paragraph --></p>

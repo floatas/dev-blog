@@ -1,0 +1,146 @@
+---
+layout: post
+title: ASP.NET CORE Required property validation
+date: 2021-06-26 13:07:58.000000000 +03:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- Software Development
+tags:
+- API
+- C#
+- validation
+meta:
+  _edit_last: '1'
+  ct_author_last_updated: default
+  _thumbnail_id: '191'
+author:
+  login: Floatas
+  email: floatas@outlook.com
+  display_name: Floatas
+  first_name: ''
+  last_name: ''
+permalink: "/2021/06/26/asp-net-core-required-property-validation/"
+---
+<p><!-- wp:paragraph --></p>
+<p>System.ComponentModel.DataAnnotations.<strong>Required</strong> validation doesn't work how most people imagine it working. Required - it does have value, if the property is nullable and value is null - this validation will fail. However, if we have value type property - then we always have value, and required validation never fails.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":191,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/06/JsonAndDataAnnotationPropertyValidation.png" alt="Data annotation validation is invoked after model binder, which means that if property is value type will be created with default value and required validation never fails." class="wp-image-191" /></figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Model binder creates an empty model and assigns values from JSON. If a JSON value is missing for enum or integer - we will get default value, and sometimes this is not desired behavior. We can approach this problem from two sides, we can make value types nullable or we can use JSON validation and fail inside the model binder.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Lets explore these two validation types by creating small project, start with empty ASP.NET core API project.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Validation with System.ComponentModel.DataAnnotations</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre title="Property validation with DataAnnotation " class="wp-block-code"><code lang="csharp" class="language-csharp">using&nbsp;System.ComponentModel.DataAnnotations;
+
+namespace&nbsp;RequiredValidation
+{
+&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;class&nbsp;WeatherModel
+&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Required]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;int&nbsp;Temperature&nbsp;{&nbsp;get;&nbsp;set;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Required]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;string&nbsp;Title&nbsp;{&nbsp;get;&nbsp;set;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}
+}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Validation with NewtonsoftJson</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre title="Install Newtonsoft Json nuget package" class="wp-block-code"><code lang="xml" class="language-xml">&nbsp;Microsoft.AspNetCore.Mvc.NewtonsoftJson</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code {"lineNumbers":false} --></p>
+<pre title="Register Newtonsof Json as default serializer." class="wp-block-code"><code lang="csharp" class="language-csharp"><code>&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;void&nbsp;ConfigureServices(IServiceCollection&nbsp;services)
+&nbsp;&nbsp;&nbsp;&nbsp;{
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;services
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.AddControllers()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.AddNewtonsoftJson();
+
+</code></code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:code --></p>
+<pre title="Apply JsonProperty validation attribute" class="wp-block-code"><code lang="csharp" class="language-csharp">using&nbsp;Newtonsoft.Json;
+
+namespace&nbsp;RequiredValidation
+{
+&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;class&nbsp;Weather2Model
+&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[JsonProperty(Required&nbsp;=&nbsp;Required.Always)]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;int&nbsp;Temperature&nbsp;{&nbsp;get;&nbsp;set;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[JsonProperty(Required&nbsp;=&nbsp;Required.Always)]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;string&nbsp;Title&nbsp;{&nbsp;get;&nbsp;set;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}
+}
+
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Endpoints</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Controller endpoints in both cases are identical, no additional changes are needed. To make testing easier I just return same model.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre title="Endpoints for both test cases" class="wp-block-code"><code lang="csharp" class="language-csharp">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[HttpPost]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Route("Update")]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;IActionResult&nbsp;UpdateWeather(WeatherModel&nbsp;weather)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;Ok(weather);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[HttpPost]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Route("Update2")]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;IActionResult&nbsp;UpdateWeather2(Weather2Model&nbsp;weather)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;Ok(weather);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Testing DataAnnotations validation</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Lets start by testing DataAnnotations validation "Update" endpoint.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":193,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/06/image-713x1024.png" alt="" class="wp-image-193" /><br />
+<figcaption>If we ignore value type property, it will get default value.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:image {"id":194,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/06/image-1-577x1024.png" alt="" class="wp-image-194" /><br />
+<figcaption>If we ignore string property with required attribute, we get error message, as expected.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:heading --></p>
+<h2>Testing JSON property validation</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:image {"id":195,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/06/image-2-528x1024.png" alt="" class="wp-image-195" /><br />
+<figcaption>We get error message when integer is not present in request.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:image {"id":196,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/06/image-3-503x1024.png" alt="" class="wp-image-196" /><br />
+<figcaption>Same as above, when string is not present in request we get error message.</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Back to C# basics, value types always have a default value - unless they are nullable. Adding required on value type property doesn't make sense since it will be with default value either it's zero or first enum value.</p>
+<p><!-- /wp:paragraph --></p>
